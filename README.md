@@ -1,1 +1,2 @@
-# beer-reccommender
+# Beer Reccommendation App
+### *using Untappd API*
