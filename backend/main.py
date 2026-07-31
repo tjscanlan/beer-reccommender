@@ -1,7 +1,8 @@
 """FastAPI backend for the Beer Recommender.
 
-Serves the JSON API under /api/* and the PWA frontend from /frontend as the
+Serves the JSON API under /api/* and the PWA frontend from /public as the
 web root, so the whole app runs from a single `uvicorn backend.main:app`.
+On Vercel, public/ is served from the CDN and this mount is a fallback.
 """
 import logging
 import re
@@ -52,7 +53,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+FRONTEND_DIR = Path(__file__).parent.parent / "public"
 
 
 class RecommendRequest(BaseModel):

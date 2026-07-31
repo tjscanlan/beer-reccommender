@@ -7,7 +7,7 @@
 Pick a few beers you love → get personalized, AI-explained recommendations —<br>
 served as an app you can install on your iPhone in under a minute. **No App Store required.**
 
-![Python](https://img.shields.io/badge/Python-3.9+-3776AB?logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688?logo=fastapi&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude-personalization-D97706?logo=anthropic&logoColor=white)
 ![PWA](https://img.shields.io/badge/PWA-installable-5A0FC8?logo=pwa&logoColor=white)
@@ -63,11 +63,23 @@ You now have a **"Beers"** app: its own beer-mug icon, full-screen launch, no br
 
 iOS only enables the offline service-worker cache over HTTPS. On plain LAN HTTP the app still installs and runs full-screen — it just needs the server reachable. To use it anywhere (with full offline caching):
 
-- **[Tailscale](https://tailscale.com)** → `tailscale serve 8000` (easiest — private HTTPS to all your devices)
+- **[Vercel](https://vercel.com)** → this repo deploys there out of the box (see below) — public HTTPS, full offline caching
+- **[Tailscale](https://tailscale.com)** → `tailscale serve 8000` (private HTTPS to all your devices)
 - **Cloudflare Tunnel** → `cloudflared tunnel --url http://localhost:8000`
-- **Deploy it** → Fly.io, Railway, or any VPS
 
 </details>
+
+## ☁️ Deploy to Vercel
+
+The repo is set up for Vercel's native FastAPI preset — no build step, no workflow files:
+
+- `[tool.vercel] entrypoint = "backend.main:app"` in [`pyproject.toml`](pyproject.toml) points Vercel at the ASGI app (the root `main.py` stays a local-dev launcher).
+- [`public/`](public/) is served straight from Vercel's CDN; the FastAPI static mount remains as a local-dev/fallback path.
+- Dependencies install from `pyproject.toml` + `uv.lock`.
+
+**Setup (once):** import the GitHub repo at vercel.com → framework preset **FastAPI** → add `ANTHROPIC_API_KEY` as a **Sensitive** env var scoped to **Production** only (previews fall back to template reasons and spend nothing). Then every push to `main` is a production deploy and every PR gets a preview URL — that's the whole CI/CD story.
+
+**Guardrails for the paid `/api/recommend` endpoint:** request-body caps (≤20 liked beers, ≤500-char taste text) and a capped, 20s-timeout Claude call in code; add a Vercel Firewall rate-limit rule (e.g. 10 req/min/IP on `POST /api/recommend` → 429) and a monthly spend limit in the Anthropic Console as backstops.
 
 ## 🏗️ How it's built
 
@@ -158,7 +170,8 @@ Credentials never hit the logs — httpx request logging is muted and a redactio
 │   ├── ai.py                # ✨ optional Claude personalization
 │   ├── untappd.py           # 🍻 optional Untappd proxy
 │   └── data/beers.json      # 60 beers × 8-axis flavor profiles
-└── frontend/                # 📱 PWA — plain HTML/CSS/JS, manifest, service worker, icons
+├── public/                  # 📱 PWA — plain HTML/CSS/JS, manifest, service worker, icons
+└── vercel.json              # ☁️ Vercel function config
 ```
 
 ---
