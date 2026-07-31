@@ -1,6 +1,6 @@
 // Minimal service worker: caches the app shell so the installed app opens
 // instantly; API calls always go to the network.
-const CACHE = "beer-recommender-v1";
+const CACHE = "beer-recommender-v2";
 const SHELL = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
