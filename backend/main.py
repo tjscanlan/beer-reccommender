@@ -103,5 +103,8 @@ def get_recommendations(req: RecommendRequest) -> RecommendResponse:
     return RecommendResponse(recommendations=recs, personalized=bool(blurbs))
 
 
-# Mounted last so /api/* routes take precedence.
-app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+# Mounted last so /api/* routes take precedence. On Vercel, public/ is served
+# from the CDN and is absent from the function bundle — StaticFiles raises on a
+# missing directory, so guard the mount or every /api/* route 500s at import.
+if FRONTEND_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
