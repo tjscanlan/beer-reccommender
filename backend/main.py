@@ -1,7 +1,8 @@
 """FastAPI backend for the Beer Recommender.
 
-Serves the JSON API under /api/* and the PWA frontend from /frontend as the
+Serves the JSON API under /api/* and the PWA frontend from /public as the
 web root, so the whole app runs from a single `uvicorn backend.main:app`.
+On Vercel, public/ is served from the CDN and this mount is a fallback.
 """
 import logging
 import re
@@ -13,7 +14,6 @@ from dotenv import load_dotenv
 load_dotenv()  # pick up UNTAPPD_* / ANTHROPIC_API_KEY from .env before other imports
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -43,21 +43,17 @@ class _RedactSecretsFilter(logging.Filter):
 for _handler in logging.getLogger().handlers:
     _handler.addFilter(_RedactSecretsFilter())
 
+# No CORS middleware on purpose: frontend and API share one origin, and
+# browsers refusing cross-origin calls keeps other sites off /api/recommend.
 app = FastAPI(title="Beer Recommender", version="1.0.0")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+FRONTEND_DIR = Path(__file__).parent.parent / "public"
 
 
 class RecommendRequest(BaseModel):
-    liked_beer_ids: List[int] = Field(default_factory=list)
-    taste_text: str = ""
+    # Caps bound the size of the prompt sent to Claude (a paid call).
+    liked_beer_ids: List[int] = Field(default_factory=list, max_length=20)
+    taste_text: str = Field(default="", max_length=500)
     limit: int = Field(default=5, ge=1, le=10)
 
 

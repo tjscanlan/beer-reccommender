@@ -28,7 +28,8 @@ def _get_client():
         return None
     try:
         import anthropic
-        _client = anthropic.Anthropic()
+        # Bound worst-case latency/spend per request: one retry, hard timeout.
+        _client = anthropic.Anthropic(timeout=20.0, max_retries=1)
     except Exception:
         logger.exception("Could not initialize Anthropic client")
         _client = None
@@ -40,6 +41,8 @@ def personalize_reasons(liked: List[dict], taste_text: str, recs: List[dict]) ->
     client = _get_client()
     if client is None or not recs:
         return {}
+
+    taste_text = taste_text[:500]  # backstop to the API-level cap
 
     liked_desc = "; ".join(f"{b['name']} ({b['style']})" for b in liked) or "none listed"
     recs_desc = "\n".join(
@@ -62,7 +65,7 @@ def personalize_reasons(liked: List[dict], taste_text: str, recs: List[dict]) ->
     try:
         response = client.messages.create(
             model=MODEL,
-            max_tokens=1024,
+            max_tokens=512,
             messages=[{"role": "user", "content": prompt}],
         )
         text = next((b.text for b in response.content if b.type == "text"), "")
