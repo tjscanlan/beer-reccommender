@@ -3,6 +3,7 @@
 Serves the JSON API under /api/* and the PWA frontend from /frontend as the
 web root, so the whole app runs from a single `uvicorn backend.main:app`.
 """
+import base64
 import logging
 import re
 from pathlib import Path
@@ -17,9 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, untappd
+from . import ai, menu_scan, untappd
 from .catalog import BEERS, get_beer, search_beers
-from .recommender import recommend
+from .recommender import rank_candidates, recommend
 
 logging.basicConfig(level=logging.INFO)
 # httpx logs full request URLs at INFO; Untappd auth rides in the query string,
@@ -66,6 +67,23 @@ class RecommendResponse(BaseModel):
     personalized: bool
 
 
+ALLOWED_MEDIA_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_IMAGE_BYTES = 8 * 1024 * 1024  # decoded
+
+
+class ScanMenuRequest(BaseModel):
+    image_base64: str
+    media_type: str = "image/jpeg"
+    liked_beer_ids: List[int] = Field(default_factory=list)
+    taste_text: str = ""
+    limit: int = Field(default=8, ge=1, le=20)
+
+
+class ScanMenuResponse(BaseModel):
+    menu_beers: List[dict]
+    personalized: bool
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {
@@ -105,6 +123,32 @@ def get_recommendations(req: RecommendRequest) -> RecommendResponse:
         if rec["id"] in blurbs:
             rec["reason"] = blurbs[rec["id"]]
     return RecommendResponse(recommendations=recs, personalized=bool(blurbs))
+
+
+@app.post("/api/scan-menu")
+def scan_menu(req: ScanMenuRequest) -> ScanMenuResponse:
+    if not ai.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Menu scanning isn't configured on this server (set ANTHROPIC_API_KEY in .env).",
+        )
+    if req.media_type not in ALLOWED_MEDIA_TYPES:
+        raise HTTPException(status_code=422, detail="Unsupported image type — send JPEG, PNG, or WebP.")
+    if len(req.image_base64) > MAX_IMAGE_BYTES * 4 // 3 + 4:
+        raise HTTPException(status_code=413, detail="Image too large — please retake or downscale.")
+    try:
+        base64.b64decode(req.image_base64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image data.")
+
+    extracted = ai.extract_menu_beers(req.image_base64, req.media_type)
+    if extracted is None:
+        raise HTTPException(status_code=502, detail="Couldn't read the menu — try a clearer photo.")
+
+    candidates = menu_scan.resolve_menu_beers(extracted)
+    ranked = rank_candidates(candidates, req.liked_beer_ids, req.taste_text)[: req.limit]
+    personalized = bool(req.liked_beer_ids) or bool(req.taste_text.strip())
+    return ScanMenuResponse(menu_beers=ranked, personalized=personalized)
 
 
 # Mounted last so /api/* routes take precedence.

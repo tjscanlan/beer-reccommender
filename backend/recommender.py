@@ -153,6 +153,33 @@ def recommend(liked_ids: List[int], taste_text: str = "", limit: int = 5) -> Lis
     return results
 
 
+def rank_candidates(candidates: List[dict], liked_ids: List[int], taste_text: str = "") -> List[dict]:
+    """Score an arbitrary candidate list (e.g. beers read off a menu) against
+    the user's profile.
+
+    Unlike recommend(), the candidate set is fixed (it's the menu), so there is
+    no per-style cap and liked beers are not excluded — a favorite appearing on
+    the menu is the best possible order.
+    """
+    if not candidates:
+        return []
+    profile, liked = build_profile(liked_ids, taste_text)
+    if profile is None:
+        return [
+            {**b, "score": 0.0, "reason": "We don't know your taste yet — this is a solid pick from the menu."}
+            for b in candidates
+        ]
+    matrix = np.stack([beer_vector(b) for b in candidates])
+    norms = np.linalg.norm(matrix, axis=1) * (np.linalg.norm(profile) or 1.0)
+    scores = matrix @ profile / np.where(norms == 0, 1.0, norms)
+    liked_styles = {b["style"] for b in liked}
+    ranked = sorted(zip(candidates, scores), key=lambda pair: pair[1], reverse=True)
+    return [
+        {**b, "score": round(float(s), 3), "reason": _fallback_reason(b, profile, liked_styles)}
+        for b, s in ranked
+    ]
+
+
 def _fallback_reason(beer: dict, profile: np.ndarray, liked_styles: set) -> str:
     """Template reason used when no Claude API key is configured."""
     flavor_vals = profile[: len(FLAVOR_KEYS)]
