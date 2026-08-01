@@ -13,7 +13,3 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "uvicorn[standard]>=0.39.0",
 ]
-
-# Vercel loads the ASGI app from here; the root main.py is only a local-dev launcher.
-[tool.vercel]
-entrypoint = "backend.main:app"

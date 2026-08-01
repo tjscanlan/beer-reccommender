@@ -73,7 +73,7 @@ iOS only enables the offline service-worker cache over HTTPS. On plain LAN HTTP 
 
 The repo is set up for Vercel's native FastAPI preset — no build step, no workflow files:
 
-- `[tool.vercel] entrypoint = "backend.main:app"` in [`pyproject.toml`](pyproject.toml) points Vercel at the ASGI app (the root `main.py` stays a local-dev launcher).
+- The root [`main.py`](main.py) re-exports the FastAPI `app`, which Vercel's preset picks up as the entrypoint (it doubles as the local-dev uvicorn launcher).
 - [`public/`](public/) is served straight from Vercel's CDN; the FastAPI static mount remains as a local-dev/fallback path.
 - Dependencies install from `pyproject.toml` + `uv.lock`.
 
