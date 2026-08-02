@@ -9,11 +9,14 @@ import json
 import logging
 import os
 import re
-from typing import Dict, List
+from typing import Dict, List, Optional
+
+from .catalog import FLAVOR_KEYS
 
 logger = logging.getLogger(__name__)
 
 MODEL = "claude-opus-4-8"
+VISION_MODEL = "claude-opus-5"
 
 _client = None
 _client_checked = False
@@ -34,6 +37,102 @@ def _get_client():
         logger.exception("Could not initialize Anthropic client")
         _client = None
     return _client
+
+
+MENU_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "beers": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "brewery": {"type": ["string", "null"]},
+                    "style": {"type": "string"},
+                    "abv": {"type": "number"},
+                    "ibu": {"type": "number"},
+                    "flavors": {
+                        "type": "object",
+                        "properties": {k: {"type": "number"} for k in FLAVOR_KEYS},
+                        "required": list(FLAVOR_KEYS),
+                        "additionalProperties": False,
+                    },
+                },
+                "required": ["name", "brewery", "style", "abv", "ibu", "flavors"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["beers"],
+    "additionalProperties": False,
+}
+
+MENU_PROMPT = (
+    "This photo shows a menu from a bar or restaurant. Extract every distinct "
+    "beer offered for sale (draft, bottle, or can). Ignore wine, cocktails, "
+    "spirits, ciders, food, and section headers.\n\n"
+    "For each beer:\n"
+    "- name: exactly as printed on the menu\n"
+    "- brewery: if printed, else null\n"
+    "- style: a conventional beer style name (e.g. 'Hazy IPA', 'Stout', "
+    "'Pilsner') — infer from the name or description if not printed\n"
+    "- abv: the printed value if shown, otherwise a typical estimate for the style\n"
+    "- ibu: the printed value if shown, otherwise a typical estimate for the style\n"
+    "- flavors: your estimate of this beer's flavor profile, each axis from "
+    "0.0 to 1.0: " + ", ".join(FLAVOR_KEYS) + "\n\n"
+    "If the image is not a menu or contains no beers, return an empty beers array."
+)
+
+
+def is_configured() -> bool:
+    """True when an Anthropic client is available (API key or auth token set)."""
+    return _get_client() is not None
+
+
+def extract_menu_beers(image_base64: str, media_type: str) -> Optional[List[dict]]:
+    """Read a beer-menu photo with Claude vision.
+
+    Returns a list of {name, brewery, style, abv, ibu, flavors} dicts, [] when
+    the image contains no beers, or None on any failure.
+    """
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        response = client.messages.create(
+            model=VISION_MODEL,
+            max_tokens=16000,
+            output_config={
+                "effort": "low",
+                "format": {"type": "json_schema", "schema": MENU_SCHEMA},
+            },
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": image_base64,
+                            },
+                        },
+                        {"type": "text", "text": MENU_PROMPT},
+                    ],
+                }
+            ],
+        )
+        if response.stop_reason == "refusal":
+            logger.warning("Menu scan refused by safety classifiers")
+            return None
+        text = next((b.text for b in response.content if b.type == "text"), "")
+        beers = json.loads(text)["beers"]
+        return beers if isinstance(beers, list) else None
+    except Exception:
+        logger.exception("Claude menu extraction failed")
+        return None
 
 
 def personalize_reasons(liked: List[dict], taste_text: str, recs: List[dict]) -> Dict[int, str]:

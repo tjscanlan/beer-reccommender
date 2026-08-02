@@ -38,7 +38,23 @@
         placeholder="e.g. juicy hazy IPAs, nothing too bitter… or dark coffee stouts"></textarea>
     </section>
 
+    <section class="card">
+      <h2>3 · At the bar? Scan the menu <span class="optional">(optional)</span></h2>
+      <p class="hint">Snap a photo of the beer list and we'll rank it against your taste.</p>
+      <input id="menu-photo" type="file" accept="image/*" capture="environment" hidden>
+      <button id="scan-btn" class="secondary" type="button">📷 Scan a menu</button>
+      <img id="menu-preview" class="menu-preview" alt="Menu photo preview" hidden>
+      <p id="scan-status" class="hint" hidden></p>
+    </section>
+
     <button id="recommend-btn" class="cta">Get my recommendations</button>
+
+    <section id="menu-results" class="results" hidden>
+      <h2>On this menu 🍻</h2>
+      <p id="menu-note" class="hint" hidden></p>
+      <div id="menu-results-list"></div>
+      <button id="rescan-btn" class="secondary" type="button">Scan another menu</button>
+    </section>
 
     <section id="results" class="results" hidden>
       <h2>Your next round 🍻</h2>
