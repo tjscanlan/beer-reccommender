@@ -147,5 +147,8 @@ def scan_menu(req: ScanMenuRequest) -> ScanMenuResponse:
     return ScanMenuResponse(menu_beers=ranked, personalized=personalized)
 
 
-# Mounted last so /api/* routes take precedence.
-app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+# Mounted last so /api/* routes take precedence. On Vercel, public/ is served
+# by the CDN and may be absent from the function bundle — StaticFiles raises at
+# import on a missing directory, which would take down every /api/* route.
+if FRONTEND_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
